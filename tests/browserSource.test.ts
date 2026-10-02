@@ -39,6 +39,33 @@ describe("browser data source", () => {
     expect(list.find((x) => x.id === "a")!.pinned).toBe(true);
   });
 
+  it("a newer published verification updates the rule but keeps the person's pin and target date", async () => {
+    const store = memory();
+    const v1 = createBrowserSource(store, [r("a")]); // verified 2026-10-01, window 29
+    await v1.saveRestaurant(r("a", { pinned: true, targetDate: "2026-11-01" }));
+    const reverified = r("a", {
+      verifiedOn: "2026-11-15",
+      dropRule: { kind: "rolling", releaseTime: "10:00", timezone: "Europe/Paris", bookingWindowDays: 30 },
+    });
+    const a = (await createBrowserSource(store, [reverified]).listRestaurants()).find((x) => x.id === "a")!;
+    expect(a.verifiedOn).toBe("2026-11-15");
+    expect(a.dropRule).toEqual(reverified.dropRule);
+    expect(a.pinned).toBe(true);
+    expect(a.targetDate).toBe("2026-11-01");
+  });
+
+  it("a person's own newer verification is not overwritten by an older published one", async () => {
+    const store = memory();
+    const mine = r("a", {
+      verifiedOn: "2026-12-01",
+      dropRule: { kind: "rolling", releaseTime: "08:00", timezone: "Europe/Paris", bookingWindowDays: 14 },
+    });
+    await createBrowserSource(store, []).saveRestaurant(mine);
+    const a = (await createBrowserSource(store, [r("a")]).listRestaurants()).find((x) => x.id === "a")!;
+    expect(a.verifiedOn).toBe("2026-12-01");
+    expect(a.dropRule).toEqual(mine.dropRule);
+  });
+
   it("rejects invalid saves and drops tampered stored entries", async () => {
     const store = memory();
     const src = createBrowserSource(store, []);

@@ -52,11 +52,25 @@ export function createBrowserSource(
     const dismissed = Array.isArray(parsed?.dismissedStarterIds)
       ? (parsed!.dismissedStarterIds as unknown[]).filter((x): x is string => typeof x === "string")
       : [];
-    // Merge in starters the user doesn't have yet and hasn't deleted — this is
-    // both the first-visit seed and how later-published starters arrive.
-    const have = new Set(restaurants.map((r) => r.id));
+    // Merge in the published starter list: add starters this person doesn't
+    // have yet (first visit, or published later) unless they deleted them, and
+    // when a starter carries a NEWER verification than their copy, take the
+    // published facts (rule, link, platform) while keeping their own pin and
+    // target date. Newest first-hand verification wins.
     const gone = new Set(dismissed);
-    for (const s of starters) if (!have.has(s.id) && !gone.has(s.id)) restaurants.push(s);
+    const index = new Map(restaurants.map((r, i) => [r.id, i]));
+    for (const s of starters) {
+      if (gone.has(s.id)) continue;
+      const i = index.get(s.id);
+      if (i === undefined) {
+        restaurants.push(s);
+        continue;
+      }
+      const mine = restaurants[i];
+      if (s.verifiedOn && (!mine.verifiedOn || s.verifiedOn > mine.verifiedOn)) {
+        restaurants[i] = { ...s, pinned: mine.pinned, targetDate: mine.targetDate };
+      }
+    }
     return { restaurants, dismissedStarterIds: dismissed };
   }
 
